@@ -1,0 +1,32 @@
+
+hyades.lstのようにepic idのリストを用意する。
+
+恒星の質量・温度を計算する。
+# stellar_property.py hyades.lst 0.15
+
+リストソース
+Hyades      Douglas+(2019) 
+Pleiades    Rebull +(2016)
+Usco        Rebull +(2018)
+Praesepe    Douglas+(2017)
+
+金属量
+Hyades 0.15 (Paulson2003,Bradt2015,Dutra-Ferreira2016)
+Pleiades 0.02 (Funayama2009, Soderblom2009)
+Usco 0.00 (Bubar2011)
+Praesep 0.14 (Yang2015, Netopil2016)
+
+恒星導出データの選定
+# analysis0.py result/hyades_stellarprop.csv
+> result/hyades_stellarprop_selected.csv
+> result/hyades_stellarprop.png
+
+ライトカーブのダウンロード.
+# dl_lightcurves.py result/hyades_stellarprop_selected.csv
+振幅の測定・周期解析
+# cal_amplitudes.py result/hyades_stellarprop_selected.csv
+K2 TESSでの振幅の比較
+# ./analysis1.py result/hyades_stellarprop_selected_out.dat result/hyades_stellarprop_selected.csv
+
+LAMOSTデータとモデル解析
+# 
