@@ -69,14 +69,14 @@ def lnfn(x, *args):
         hT_m    = resh[1]
         #SKp     = 2*hKp/hKp_m
         #ST      = 2*hT/hT_m
-        #if (x[0]<0.001) | (1<=x[0]):
-        #    return -np.inf
-        #else:
-        lnL     = -(np.sum(((hKp - hKp_m)**2)/ (2*hKp_e**2)))\
-                    -(np.sum(((hT - hT_m)**2)/ (2*hT_e**2)))
-                    #    +np.log(1./(x[0]*1e3*np.log(1000./1.)))
+        if (x[0]<=0.) | (1<=x[0]):
+            return -np.inf
+        else:
+            lnL     = -(np.sum(((hKp - hKp_m)**2)/ (2*hKp_e**2)))\
+                        -(np.sum(((hT - hT_m)**2)/ (2*hT_e**2)))
+                            #    +np.log(1./(x[0]*1e3*np.log(1000./1.)))
 
-        return lnL
+            return lnL
 
 def line_sigma(chain):
     schain  = np.sort(chain)
@@ -292,7 +292,7 @@ def main(vdata, MISTdata, fluxmodel, fkey="tmp", ndim=2, nwalker=10, nstep=1000)
 
     args    = [udata[:,0], udata[:,1], udata[:,2], fluxmodel, logg_ar, udata[:,3], udata[:,4],\
         udata[:,5], udata[:,6]]
-    x0      = [ [0.01, 0.1],\
+    x0      = [ [0.001, 0.5],\
                 [0., 3000.],\
                 [-1., 1.],\
                 [-1.e-3, 1.e-3],\
