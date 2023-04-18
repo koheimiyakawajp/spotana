@@ -13,13 +13,14 @@ from copy import copy
 
 dir         = "./mcmc/"
 
-
-def Tsp(Tph, c, T_low=2600):
-    #Tspot   = np.full(len(Tph), 0.)
-    Tspot   = copy(Tph)
+def d_temp(Tph, c):
+    dT  = np.full(np.shape(Tph), 0.)
     for i in range(len(c)):
-        #Tspot   += c[i]*(Tph - 3000.)**i
-        Tspot   -= c[i]*(Tph - 3000.)**i
+        dT  += c[i]*(Tph - 3000.)**i
+    return dT
+    
+def Tsp(Tph, c):
+    Tspot   = Tph - d_temp(Tph, c)
 
     return Tspot
 
@@ -39,8 +40,8 @@ def h_model(Thost, c, S, fluxmodel, logg):
         return np.array((0,0,0))
 
 
-def hThKp_model(Thost, c, fluxmodel, logg):
-    resh    = h_model(Thost, c, 1., fluxmodel, logg)
+def hThKp_model(Thost, c, fluxmodel, logg, S=1):
+    resh    = h_model(Thost, c, S, fluxmodel, logg)
     if np.any(resh!=0):
         hThKp   = resh[1]/ resh[0]
         return hThKp, resh
@@ -55,17 +56,25 @@ def lnfn(x, *args):
     logg        = args[4]
     
     hKp         = args[5]
-    hT          = args[6]
+    hKp_e       = args[6]
+    hT          = args[7]
+    hT_e        = args[8]
 
-    hmodel,resh = hThKp_model(teff, x, fluxmodel, logg)
+    hmodel,resh = hThKp_model(teff, x[1:], fluxmodel, logg, S=x[0])
     if np.all(hmodel==0.0):
         return -np.inf
     else:
-        lnL     = -(np.sum(((hThKp - hmodel)**2)/ (2*err**2)))
-        #hKp_m   = resh[0]
-        #hT_m    = resh[1]
+        #lnL     = -(np.sum(((hThKp - hmodel)**2)/ (2*err**2)))
+        hKp_m   = resh[0]
+        hT_m    = resh[1]
         #SKp     = 2*hKp/hKp_m
         #ST      = 2*hT/hT_m
+        #if (x[0]<0.001) | (1<=x[0]):
+        #    return -np.inf
+        #else:
+        lnL     = -(np.sum(((hKp - hKp_m)**2)/ (2*hKp_e**2)))\
+                    -(np.sum(((hT - hT_m)**2)/ (2*hT_e**2)))
+                    #    +np.log(1./(x[0]*1e3*np.log(1000./1.)))
 
         return lnL
 
@@ -90,7 +99,7 @@ def plot_corner(samples, fkey="tmp", save=True):
     samples_flt = samples.reshape(nwalker*nstep, ndim)
     plt.figure(figsize=(2.1*ndim, 2.*ndim))
 
-    labels = ["c0", "c1", "c2", "c3", "c4"]
+    labels = ["S", "c0", "c1", "c2", "c3", "c4"]
     for i in range(ndim):
         ch_i        = limit_chain(samples_flt[:,i])
         ys1,ym,ys2  = line_sigma(samples_flt[:,i])
@@ -165,7 +174,7 @@ def plot_scatter(vdata, udata, args, MISTdata, fluxmodel, fkey="tmp", save=True)
     fig     = plt.figure(figsize=(5.5,4.5))
 
     ax1     = fig.add_subplot(3,1,(1,2))
-    hThKp,_ = hThKp_model(newx, args, fluxmodel, newlogg)
+    hThKp,_ = hThKp_model(newx, args[1:], fluxmodel, newlogg, S=args[0])
     ax1.plot(newx, hThKp, c='darkorange', zorder=3)
     ax1.scatter(vdata[:,0], vdata[:,1], s=10, c='lightgrey', zorder=1)
     ax1.errorbar(udata[:,0], udata[:,1], yerr=udata[:,2], fmt='o', ms=3.5, elinewidth=0.5, c='black', zorder=2)
@@ -175,7 +184,7 @@ def plot_scatter(vdata, udata, args, MISTdata, fluxmodel, fkey="tmp", save=True)
     ax1.set_ylabel("$h_{T}$/$h_{Kp}$")
     ax1.set_ylim((5e-2, 2e1))
 
-    hThKp_s,_   = hThKp_model(udata[:,0], args, fluxmodel, newlogg)
+    hThKp_s,_   = hThKp_model(udata[:,0], args[1:], fluxmodel, newlogg, S=args[0])
     ax2     = fig.add_subplot(3,1,3, sharex=ax1)
     ax2.errorbar(udata[:,0], udata[:,1] - hThKp_s, yerr=udata[:,2], ms=3.5, elinewidth=0.5, fmt='o', c='black', zorder=0)
     ax2.axhline(0., lw=1, c='black', ls=':')
@@ -256,12 +265,35 @@ import json
 def main(vdata, MISTdata, fluxmodel, fkey="tmp", ndim=2, nwalker=10, nstep=1000):
     udata       = rm_outlier(vdata)
     logg_ar     = iu.logg(MISTdata, udata[:,0])
-    #plt.scatter(udata[:,3], udata[:,5])
+    #x   = np.linspace(1.,1000,int(1e4))
+    #x   = np.linspace(1.e-3,1.,int(1e4))
+    ##y   = 1./(x*np.log(1000./1.))
+    ##y   = 1./(x*np.log(x[-1]/x[0]))
+    #y   = np.full(int(1e4),1./(x[-1] - x[0]))
+    #print(np.sum(y))
+    #plt.plot(x,y)
+    #plt.xscale('log')
     #plt.show()
     #exit()
 
-    args    = [udata[:,0], udata[:,1], udata[:,2], fluxmodel, logg_ar, udata[:,3], udata[:,5]]
-    x0      = [ [0., 3000.],\
+    #plt.scatter(udata[:,3], udata[:,5])
+    #plt.show()
+    #exit()
+    #c_test      = [27.46, -4.30e-02, 3.25e-05]
+    #print(udata[:,1])
+    #_, resh     = hThKp_model(udata[:,0], c_test, fluxmodel, logg_ar, S=1)
+    #print(resh)
+    #Sspot   = 2* udata[:,3]/resh[0]
+    #SspotT  = 2* udata[:,5]/resh[1]
+    #plt.hist(Sspot  , 50, range=(0,2))
+    #plt.hist(SspotT , 50, range=(0,2), alpha=0.5)
+    #plt.show()
+    #exit()
+
+    args    = [udata[:,0], udata[:,1], udata[:,2], fluxmodel, logg_ar, udata[:,3], udata[:,4],\
+        udata[:,5], udata[:,6]]
+    x0      = [ [0.01, 0.1],\
+                [0., 3000.],\
                 [-1., 1.],\
                 [-1.e-3, 1.e-3],\
                 [-1e-8, 1e-8] ]
@@ -278,6 +310,7 @@ def main(vdata, MISTdata, fluxmodel, fkey="tmp", ndim=2, nwalker=10, nstep=1000)
     bestlnfn    = max(sampler.get_log_prob(flat=True))
     BIC         = -2*bestlnfn + ndim*np.log10(len(udata[:,0]))
     redchi      = -2*bestlnfn/len(udata[:,0])
+    
     
     plot_scatter(vdata, udata, statres[:,0], MISTdata, fluxmodel, fkey=fkey)
 
@@ -305,7 +338,7 @@ def main(vdata, MISTdata, fluxmodel, fkey="tmp", ndim=2, nwalker=10, nstep=1000)
     newx    = np.linspace(min(vdata[:,0]), max(vdata[:,0]), 300)
     plt.figure(figsize=(5,5))
     plt.plot(newx, newx, ls='--', lw=0.5, c='black', zorder=0)
-    plt.plot(newx, Tsp(newx, statres[:,0]), zorder=2)
+    plt.plot(newx, Tsp(newx, statres[1:,0]), zorder=2)
     plt.show()
     exit()
 
