@@ -20,18 +20,22 @@ def limit_chain(chain):
     return schain[int(nc*0.05):-int(nc*0.05)]
 
 def plot_corner(samples, fkey="tmp", save=True, S1flg=True):
+#def plot_corner(sampler, fkey="tmp", save=True, S1flg=True):
+    #nshape  = np.shape(sampler.get_chain())
     nshape  = np.shape(samples)
     nstep   = nshape[0]
     nwalker = nshape[1]
     ndim    = nshape[2]
 
     samples_flt = samples.reshape(nwalker*nstep, ndim)
+    #samples_flt = sampler.flatchain
     plt.figure(figsize=(2.1*ndim, 2.*ndim))
 
-    if S1flg:
-        labels = ["S1", "S2", "c0", "c1", "c2", "c3", "c4"]
-    else:
-        labels = ["S2", "c0", "c1", "c2", "c3", "c4"]
+    #if S1flg:
+    #    labels = ["S1", "S2", "c0", "c1", "c2", "c3", "c4"]
+    #else:
+    #    labels = ["S2", "c0", "c1", "c2", "c3", "c4"]
+    labels = ["S1", "c1", "S2", "c2", "S3", "c3", "S4", "c4"]
 
     for i in range(ndim):
         ch_i        = limit_chain(samples_flt[:,i])
@@ -81,10 +85,11 @@ def plot_corner(samples, fkey="tmp", save=True, S1flg=True):
 def plot_chain(samples, fkey="tmp", save=True, S1flg=True):
     ndim    = np.shape(samples)[-1]
     fig, axes = plt.subplots(ndim, 1, figsize=(6, 1.5*ndim), sharex=True)
-    if S1flg:
-        labels = ["S1", "S2", "c0", "c1", "c2", "c3", "c4"]
-    else:
-        labels = ["S2", "c0", "c1", "c2", "c3", "c4"]
+    #if S1flg:
+    #    labels = ["S1", "S2", "c0", "c1", "c2", "c3", "c4"]
+    #else:
+    #    labels = ["S2", "c0", "c1", "c2", "c3", "c4"]
+    labels = ["S1", "c1", "S2", "c2", "S3", "c3", "S4", "c4", "S5", "c5"]
     for i in range(ndim):
         ax1 = axes[i]
         ax1.plot(samples[:, :, i], "k", alpha=0.3, lw=1)
@@ -119,10 +124,12 @@ def plot_scatter(vdata, udata, args, MISTdata, fluxmodel, hmodelfunc, fkey="tmp"
     ax1.scatter(vdata[:,0], vdata[:,1], s=10, c='lightgrey', zorder=1)
     ax1.errorbar(udata[:,0], udata[:,1], yerr=udata[:,2], fmt='o', ms=3.5, elinewidth=0.5, c='black', zorder=2)
     ax1.axhline(1., lw=1, c='black', ls=':', zorder=0)
-    ax1.set_yscale("log")
+    #ax1.set_yscale("log")
     ax1.axes.xaxis.set_visible(False)
     ax1.set_ylabel("$h_{T}$/$h_{Kp}$")
-    ax1.set_ylim((5e-2, 2e1))
+    #ax1.set_ylim((5e-2, 2e1))
+    ax1.set_ylim((0, 2.))
+    ax1.set_yticks([0.2,0.6,1.0,1.4,1.8])
 
     if S1flg:
         hThKp_s,_   = hmodelfunc(udata[:,0], args[2:], fluxmodel, newlogg, S1=args[0], S2=args[1])
