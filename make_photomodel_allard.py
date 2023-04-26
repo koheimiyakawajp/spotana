@@ -11,7 +11,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import interp1d, interp2d
 
-SPECDIR="./bin/data/spectra/models_1680746720/bt-settl/"
+#SPECDIR="./bin/data/spectra/models_1680746720/bt-settl/"
+SPECDIR="../spectra/models_1680746720/bt-settl/"
 
 def cal_flux_KpT(specfile_list):
 
@@ -56,7 +57,10 @@ def cal_flux(arg_list):
 
 def main():
     #teflist =   np.linspace(2800, 5500, 28, dtype='i8')
-    teflist =   np.linspace(25, 60, 36, dtype='i8')
+    #teflist =   np.linspace(25, 60, 36, dtype='i8')
+    teflist =   np.linspace(16, 60, 45, dtype='i8')
+    #print(teflist)
+    #exit()
     res_mtx = np.array([[0,0,0,0,0]])
     for teff in teflist:
         print("processing " + str(teff) +"00 K.")

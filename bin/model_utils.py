@@ -13,6 +13,7 @@ def makefluxmodel_FeH(fluxmodel, FeH, FeHa=0.0, FeHb=0.5):
     modF05  = fluxmodel[(fluxmodel[:,1]==FeHb)]
     #print(len(modF00))
     #print(len(modF05))
+    #exit()
     
     Tefflist    = np.unique(modF00[:,0])
     logglist    = np.unique(modF00[:,2])
@@ -47,6 +48,19 @@ def makefluxmodel_FeH(fluxmodel, FeH, FeHa=0.0, FeHb=0.5):
 
     return np.vstack(res)
 
+def makefluxmodel_grid(fluxmodel):
+    tf_ar   = np.unique(fluxmodel[:,0])
+    lg_ar   = np.unique(fluxmodel[:,2])
+    f_redef = []
+    for tf in tf_ar:
+        cd  = (fluxmodel[:,0]==tf)
+        y3  = interp1d(fluxmodel[cd,2], fluxmodel[cd,3], kind='linear', fill_value='extrapolate')
+        y4  = interp1d(fluxmodel[cd,2], fluxmodel[cd,4], kind='linear', fill_value='extrapolate')
+        for lg in lg_ar:
+            f_redef.append([tf, 0.0, lg, y3(lg), y4(lg)])
+    f_redef = np.array(f_redef)
+    return f_redef
+
 def makefluxmodel_Tefflogg(fluxmodel, Teff, logg):
     tf_ar   = np.unique(fluxmodel[:,0])
     lg_ar   = np.unique(fluxmodel[:,2])
@@ -55,8 +69,10 @@ def makefluxmodel_Tefflogg(fluxmodel, Teff, logg):
     fKp     = fluxmodel[:,3].reshape(n,m)
     fT      = fluxmodel[:,4].reshape(n,m)
 
-    func_Kp = interp2d(lg_ar, tf_ar, fKp, kind='cubic', fill_value=True) 
-    func_T  = interp2d(lg_ar, tf_ar, fT,  kind='cubic', fill_value=True) 
+    func_Kp = interp2d(lg_ar, tf_ar, fKp, kind='linear', fill_value=True) 
+    func_T  = interp2d(lg_ar, tf_ar, fT,  kind='linear', fill_value=True) 
+    #func_Kp = interp2d(lg_ar, tf_ar, fKp, kind='cubic', fill_value=True) 
+    #func_T  = interp2d(lg_ar, tf_ar, fT,  kind='cubic', fill_value=True) 
     res     = []
     for lg, tf in zip(logg, Teff):
         fKpout  = func_Kp(lg, tf)[0]
