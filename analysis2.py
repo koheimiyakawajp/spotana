@@ -175,10 +175,11 @@ def calstat(flatchain):
 
 def form_result(statres, BIC, redchi, S1flg=True):
     res = {}
-    if S1flg:
-        name_ar = ["S1", "S2","c0", "c1", "c2", "c3", "c4"]
-    else:
-        name_ar = ["S2","c0", "c1", "c2", "c3", "c4"]
+    #if S1flg:
+    #    name_ar = ["S1", "S2","c0", "c1", "c2", "c3", "c4"]
+    #else:
+    #    name_ar = ["S2","c0", "c1", "c2", "c3", "c4"]
+    name_ar = ["S1", "c1", "S2", "c2", "S3", "c3", "S4", "c4"]
 
     for i in range(len(statres[:,0])):
         name1  = name_ar[i]
