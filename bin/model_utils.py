@@ -69,10 +69,10 @@ def makefluxmodel_Tefflogg(fluxmodel, Teff, logg):
     fKp     = fluxmodel[:,3].reshape(n,m)
     fT      = fluxmodel[:,4].reshape(n,m)
 
-    func_Kp = interp2d(lg_ar, tf_ar, fKp, kind='linear', fill_value=True) 
-    func_T  = interp2d(lg_ar, tf_ar, fT,  kind='linear', fill_value=True) 
-    #func_Kp = interp2d(lg_ar, tf_ar, fKp, kind='cubic', fill_value=True) 
-    #func_T  = interp2d(lg_ar, tf_ar, fT,  kind='cubic', fill_value=True) 
+    #func_Kp = interp2d(lg_ar, tf_ar, fKp, kind='linear', fill_value=True) 
+    #func_T  = interp2d(lg_ar, tf_ar, fT,  kind='linear', fill_value=True) 
+    func_Kp = interp2d(lg_ar, tf_ar, fKp, kind='cubic', fill_value=True) 
+    func_T  = interp2d(lg_ar, tf_ar, fT,  kind='cubic', fill_value=True) 
     res     = []
     for lg, tf in zip(logg, Teff):
         fKpout  = func_Kp(lg, tf)[0]
