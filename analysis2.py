@@ -48,7 +48,7 @@ def h_model(Thost, c, S1, S2, fluxmodel, logg):
     if (np.all(Fspot!=1) &(np.all(Fspot<Fhost))):
         #Fphot       = (2.*Fhost - Fspot*(2.*S1 + S2))/(2.-2.*S1- S2)
         #h   = (Fphot - Fspot)*S2/Fhost/2.
-        h   = (1. - Fspot)*S2/2.
+        h   = (1. - Fspot/Fhost)*S2/2.
         hKp = h[:,0]
         hT  = h[:,1]
 
@@ -65,7 +65,7 @@ def S_inv(Thost, h, c, fluxmodel, logg):
         #c1  = 2*h*Fhost/(Fhost - Fspot)
         #c2  = 1./(1. + h*Fhost/(Fhost - Fspot))
         #S   = c1*c2
-        S   = 2*h/(1. - Fspot)
+        S   = 2*h/(1. - Fspot/Fhost)
 
         return S.T
     else:
