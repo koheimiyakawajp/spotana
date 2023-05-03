@@ -85,7 +85,7 @@ def plot_corner(samples, fkey="tmp", save=True):
                 kernel = gaussian_kde(value)
 
                 f = np.reshape(kernel(positions).T, xx.shape)
-                plt.contourf(xx,yy,f,cmap=cm.Oranges)
+                plt.contourf(xx,yy,f,cmap=cm.Oranges, levels=10)
 
                 xs1,xm,xs2  = line_sigma(samples_flt[:,j])
                 plt.axvline(xs1, ls=':', c='black', lw=0.5)
