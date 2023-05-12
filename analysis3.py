@@ -1,0 +1,399 @@
+#!/usr/bin/env python3
+
+import numpy as np
+import matplotlib.pyplot as plt
+import sys
+
+from scipy.interpolate import interp1d
+import bin.model_utils as mu
+import bin.iso_utils as iu
+import bin.mcmcplot as mp
+import bin.corner_miyakawa as cmiya
+
+import emcee
+from copy import copy
+
+dir         = "./mcmc/"
+
+
+#def d_temp(Tph, c):
+#    dT  = np.full(np.shape(Tph), 0.)
+#    for i in range(len(c)):
+#        dT  += c[i]*(Tph - 3000.)**i
+#    return dT
+#    
+#def Tsp(Tph, c):
+#    Tspot   = Tph - d_temp(Tph, c)
+#
+#    return Tspot
+
+def Tsp(Tph, c):
+    Tspot   = Tph*(1.- c)
+    return Tspot
+
+def Tph_SBlaw(Thost, c, S1, S2, fluxmodel, logg):
+    Fhost   = mu.makefluxmodel_Tefflogg(fluxmodel, Thost, logg)
+    Fspot   = mu.makefluxmodel_Tefflogg(fluxmodel, Tsp(Thost, c), logg)
+    if (np.all(Fspot!=1) &(np.all(Fspot<Fhost))):
+        Fphot       = (2.*Fhost - Fspot*(2.*S1 + S2))/(2.-2.*S1- S2)
+        Tphot       = Thost.reshape(-1,1) * (Fphot/Fhost)**0.25
+        return np.mean(Tphot, axis=1)
+    else:
+        return np.array((0,0,0))
+
+
+def h_model(Thost, c, S1, S2, fluxmodel, logg):
+    Fhost   = mu.makefluxmodel_Tefflogg(fluxmodel, Thost, logg)
+    Fspot   = mu.makefluxmodel_Tefflogg(fluxmodel, Tsp(Thost, c), logg)
+    if (np.all(Fspot!=1) &(np.all(Fspot<Fhost))):
+        #Fphot       = (2.*Fhost - Fspot*(2.*S1 + S2))/(2.-2.*S1- S2)
+        #h   = (Fphot - Fspot)*S2/Fhost/2.
+        h   = (1. - Fspot.T/Fhost.T)*S2/2.
+        #hKp = h[:,0]
+        #hT  = h[:,1]
+        hKp = h[0]
+        hT  = h[1]
+
+        return hKp, hT
+    else:
+        return np.array((0,0,0))
+
+def S_inv(Thost, h, c, fluxmodel, logg):
+    Fhost   = mu.makefluxmodel_Tefflogg(fluxmodel, Thost, logg)
+    Fspot   = mu.makefluxmodel_Tefflogg(fluxmodel, Tsp(Thost, c), logg)
+    if (np.all(Fspot!=1) &(np.all(Fspot<Fhost))):
+        #Fphot       = (2.*Fhost - Fspot*S2)/(2.- S2)
+        #h   = (Fphot - Fspot)*S2/Fhost/2.
+        #c1  = 2*h*Fhost/(Fhost - Fspot)
+        #c2  = 1./(1. + h*Fhost/(Fhost - Fspot))
+        #S   = c1*c2
+        S   = 2*h/(1. - Fspot/Fhost)
+
+        return S.T
+    else:
+        return np.array((0,0,0))
+
+def loop_Scalc(nbin, Thost, h, c, fluxmodel, logg):
+    Tthres      = np.linspace(np.min(Thost), np.max(Thost), nbin+1)
+
+    Stotal      = []
+    for i in range(nbin):
+        cond    = ((Tthres[i]<=Thost)&(Thost<Tthres[i+1]))
+        #args_u  = [teff[cond], 0, 0, fluxmodel, logg[cond],\
+        #    hKp[cond], hKp_e[cond], hT[cond], hT_e[cond], S1flg]
+        S       = S_inv(Thost[cond], h[cond], c[i], fluxmodel, logg[cond])
+        Stotal.append(S)
+    S   = np.hstack(Stotal)
+
+    return S
+
+
+def hThKp_model(Thost, c, fluxmodel, logg, S1=0.1, S2=0.1):
+    resh    = h_model(Thost, c, S1, S2, fluxmodel, logg)
+    if np.any(resh!=0):
+        hThKp   = resh[1]/ resh[0]
+        return hThKp, resh
+    else:
+        return np.array((0,0,0)), resh
+
+def lnfn_unit(x, args):
+    teff        = args[0]
+    #hThKp       = args[1]
+    #err         = args[2]
+    fluxmodel   = args[3]
+    logg        = args[4]
+    
+    hKp         = args[5]
+    hKp_e       = args[6]
+    hT          = args[7]
+    hT_e        = args[8]
+
+    S_ar        = args[9]
+    #if S1flg :
+    #    if (np.min(x[:1])<0.) | (1<=np.max(x[:1])) | (1.<np.sum(x[:1])):
+    #        return -np.inf
+    #    else:
+    #        hmodel,resh = hThKp_model(teff, x[2:], fluxmodel, logg, S1=x[0], S2=x[1])
+    #else :
+    if (x<0.) | (1<=x) :
+        return -np.inf
+    else:
+        hmodel,resh = hThKp_model(teff, x, fluxmodel, logg, S1=0, S2=S_ar)
+
+    if np.all(hmodel==0.0):
+        return -np.inf
+    else:
+        hKp_m   = resh[0]
+        hT_m    = resh[1]
+        lnL     = -(np.sum(((hKp - hKp_m)**2)/ (2*hKp_e**2)))\
+                    -(np.sum(((hT - hT_m)**2)/ (2*hT_e**2)))
+
+        return lnL
+
+def lnfn(x, *args):
+    teff        = args[0]
+    #hThKp       = args[1]
+    #err         = args[2]
+    fluxmodel   = args[3]
+    logg        = args[4]
+
+    hKp         = args[5]
+    hKp_e       = args[6]
+    hT          = args[7]
+    hT_e        = args[8]
+
+    #S1flg       = args[9]
+    S1flg       = False
+    nbin        = args[10][0]
+    nb_s        = args[10][1]
+    Tthres      = np.linspace(np.min(teff), np.max(teff), nbin+1)
+    #nx          = 3 if S1flg else 2
+
+    amp_av      = (hKp*hKp_e**(-2) + hT*hT_e**(-2))/(hKp_e**(-2) + hT_e**(-2))
+    tmpar       = np.linspace(np.log10(np.min(amp_av)*0.9), np.log10(np.max(amp_av)*1.1), nb_s+1)
+    Sthres      = 10**tmpar
+    S_ar        = np.full(len(teff), 0.01)
+    for i in range(nb_s):
+        cond    = ((Sthres[i]<=amp_av)&(amp_av<Sthres[i+1]))
+        S_ar[cond]  = x[i+int(nbin)]
+
+    lnfn_total  = 0
+    for i in range(nbin):
+        cond    = ((Tthres[i]<=teff)&(teff<Tthres[i+1]))
+        args_u  = [teff[cond], 0, 0, fluxmodel, logg[cond],\
+            hKp[cond], hKp_e[cond], hT[cond], hT_e[cond], S_ar[cond]]
+        #x_u     = x[i*nx:(i+1)*nx]
+        lnfn_total  += lnfn_unit(x[i], args_u)
+
+    return lnfn_total
+
+def make_init(x0, ndim, nwalker):
+    res     = []
+    con     = (ndim[0]+ndim[1]==len(x0))
+    for i in range(ndim[0] + ndim[1]):
+        if con:
+            x   = x0[i]
+            tmp = np.random.uniform(x[0], x[1], nwalker)
+        else:
+            tmp = np.random.uniform(x0[0], x0[1], nwalker)
+        res.append(tmp)
+    #for i in range(ndim[0] + ndim[1]):
+    #     tmp = np.random.uniform(x0[0], x0[1], nwalker)
+    #     res.append(tmp)
+
+    return np.vstack(res).T
+
+from multiprocessing import Pool
+def emcee_fit(param, x0, ndim=(2,3), nwalker=10, nstep=1000, dfrac=0.3, plot=False, fkey="tmp"):
+
+    S1flg   = param[-2]
+    xy0 = make_init(x0, ndim, nwalker)
+    ndimsum = int(ndim[0] + ndim[1])
+    with Pool() as pool:
+        sampler = emcee.EnsembleSampler(nwalker,ndimsum,lnfn,args=param, pool=pool)
+        sampler.run_mcmc(xy0, nstep, progress=True)
+    vid     = (sampler.get_log_prob()[-1]!=-np.inf)
+    samples = sampler.get_chain()[int(nstep*dfrac):, vid]
+    #print(samples[-1])
+
+    label=[]
+    for i in range(ndim[0]):
+        label.append("c"+str(int(i+1)))
+    for i in range(ndim[1]):
+        label.append("S"+str(int(i+1)))
+
+    if plot:
+        mp.plot_chain(samples, fkey=fkey, S1flg=S1flg, labels=label)
+        mp.plot_corner(samples,fkey=fkey, labels=label)
+        #cmiya.dimplot(ndim, sampler)
+        #mp.plot_corner(sampler,fkey=fkey, S1flg=S1flg)
+
+    #return np.median(samples[:,:,0]), np.median(samples[:,:,1])
+    return sampler
+
+def rm_outlier(idata):
+    odata       = copy(idata)
+    sid         = np.argsort(odata[:,1])
+    odata       = odata[sid]
+    return odata[3:-3]
+
+def calstat(flatchain):
+    dlen    = len(flatchain[0])
+    res     = []
+    for fc in flatchain:
+        sc  = np.sort(fc)
+        loe = sc[int(dlen*0.176)]
+        upe = sc[-int(dlen*0.176)]
+        med = sc[int(dlen/2)]
+        
+        res.append([med, loe-med, upe-med])
+    
+    return np.vstack(res)
+
+def form_result(statres, chi2, BIC, redchi, ndim, S1flg=True):
+    res = {}
+    #if S1flg:
+    #    name_ar = ["S1", "S2","c0", "c1", "c2", "c3", "c4"]
+    #else:
+    #    name_ar = ["S2","c0", "c1", "c2", "c3", "c4"]
+    name_ar=[]
+    for i in range(ndim[0]):
+        name_ar.append("c"+str(int(i+1)))
+    for i in range(ndim[1]):
+        name_ar.append("S"+str(int(i+1)))
+
+    for i in range(len(statres[:,0])):
+        name1  = name_ar[i]
+        name2  = name_ar[i] + "_er1"
+        name3  = name_ar[i] + "_er2"
+        name4  = name_ar[i] + "_str"
+        res[name1]  = '{:.2f}'.format(statres[i,0]) if abs(statres[i,0]) > 1 else '{:.2e}'.format(statres[i,0])
+        res[name2]  = '{:.2f}'.format(statres[i,1]) if abs(statres[i,1]) > 1 else '{:.2e}'.format(statres[i,1])
+        res[name3]  = '{:.2f}'.format(statres[i,2]) if abs(statres[i,2]) > 1 else '{:.2e}'.format(statres[i,2])
+        res[name4]  = res[name1]+"_{"+res[name2]+"}^{"+res[name3]+"}"
+    res["chi2"]     = '{:.2f}'.format(chi2)
+    res["bic"]      = '{:.2f}'.format(BIC)
+    res["redchi"]   = '{:.2f}'.format(redchi)
+
+    return res
+
+import json
+import subprocess
+#def main(vdata, MISTdata, fluxmodel, fkey="tmp", ndim=2, nwalker=10, nstep=1000, S1flg=False, nbin=3):
+def main(vdata, MISTdata, fluxmodel, fkey="tmp", nwalker=10, nstep=1000, S1flg=False, nbin=3, nb_s=3):
+    udata       = rm_outlier(vdata)
+    logg_ar     = iu.logg(MISTdata, udata[:,0])
+    #ndim        = nbin*2
+    ndim        = (nbin,nb_s)
+    ndim_sum    = nbin+nb_s
+
+    args    = [udata[:,0], udata[:,1], udata[:,2], fluxmodel, logg_ar, \
+                udata[:,3], udata[:,4],\
+                    udata[:,5], udata[:,6], S1flg, ndim]
+    
+    amp_av      = (udata[:,3]*udata[:,4]**(-2) \
+        + udata[:,5]*udata[:,6]**(-2))/(udata[:,4]**(-2) + udata[:,6]**(-2))
+    #print(np.min(amp_av), np.max(amp_av))
+    ##print(np.logspace(np.min(amp_av), np.max(amp_av), 10))
+    #arr1    = np.linspace(np.log10(np.min(amp_av*0.9)), np.log10(np.max(amp_av*1.1)),10)
+    #print(arr1)
+    #print(10**arr1)
+    #S_ar        = np.full(len(udata[:,0]), 0.01)
+    #print(S_ar)
+    #exit()
+    
+        
+
+    fparam  = (dir + fkey).split("_w")[0]
+    spres   = subprocess.run("ls -tr "+fparam+"*_XX_result.json | tail -n 1",\
+        shell=True, capture_output=True,text=True).stdout
+    if len(spres) != 0:
+        fparam  = spres[:-1]
+        jo  = open(fparam, 'r')
+        prm = json.load(jo)
+        prmv    = list(prm.values())
+        x0      = []
+        for i in range(ndim[0]+ndim[1]):
+            md  = float(prmv[i*4])
+            e1  = float(prmv[i*4+1])
+            e2  = float(prmv[i*4+2])
+            x0.append([md+e1, md+e2])
+    else:
+        x0      = [0.001, 0.1]
+
+    sampler = emcee_fit(args, x0, ndim=ndim, nwalker=nwalker, nstep=nstep, plot=True, fkey=fkey)
+    s_flat  = sampler.get_chain(flat=True)
+
+    vid         = (sampler.get_log_prob()[-1]!=-np.inf)
+    samples     = sampler.get_chain()[int(nstep/3.):, vid]
+    ns,nw,nd    = np.shape(samples)
+    s_flat      = samples.reshape(ns*nw, nd)
+
+    statres     = calstat(s_flat.T)
+    bestlnfn    = max(sampler.get_log_prob(flat=True))
+    chi2        = -2*bestlnfn
+    BIC         = chi2 + ndim_sum*np.log(len(udata[:,0])*2)
+    redchi      = chi2/(len(udata[:,0])*2 - ndim_sum)
+    
+    omodel, zansa   = mp.plot_scatter2(udata, statres, ndim, MISTdata, fluxmodel, hThKp_model, fkey=fkey)
+    np.savetxt(dir+fkey+"_scatter_zansa.dat", zansa.T)
+    np.savetxt(dir+fkey+"_TcS_result.dat", omodel, fmt='%s')
+
+    result_dict = form_result(statres, chi2, BIC, redchi, ndim, S1flg)
+    tf          = open(dir+fkey+"_result.json","w")
+    json.dump(result_dict, tf)
+    tf.close()
+    
+    #print(udata[:,4])
+    #S   = loop_Scalc(nbin, udata[:,0], np.array((udata[:,4], udata[:,6])).T,\
+    #    statres[::2,0], fluxmodel, logg_ar)
+    #S_1 = loop_Scalc(nbin, udata[:,0], np.array((udata[:,4], udata[:,6])).T,\
+    #    statres[::2,0]+statres[::2,1], fluxmodel, logg_ar)
+    #S_2 = loop_Scalc(nbin, udata[:,0], np.array((udata[:,4], udata[:,6])).T,\
+    #    statres[::2,0]+statres[::2,2], fluxmodel, logg_ar)
+    
+    #S_er    = np.array(((S[0] - S_1[0], S_2[0] - S[0]),(S[1] - S_1[1], S_2[1] - S[1])))
+    #S_er    = np.abs(S_er)
+    #plt.plot(np.linspace(0,1,100), np.linspace(0,1,100))
+    #plt.errorbar(S[0], S[1], xerr=S_er[0], yerr=S_er[1], fmt='o')
+    #plt.scatter(udata[:,4], udata[:,6])
+    #plt.xlim((np.min(S), np.max(S)))
+    #plt.ylim((np.min(S), np.max(S)))
+    #plt.xscale("log")
+    #plt.yscale("log")
+    #plt.show()
+
+def clean_vdata(vdata):
+    con1    = (2600.<= vdata[:,0])&(vdata[:,0]<=6000.)
+    con2    = np.logical_not(np.isnan(vdata[:,2]))
+    return vdata[(con1&con2)]
+
+
+if __name__=='__main__':
+
+    if (len(sys.argv) == 4) | (len(sys.argv) == 7) | (len(sys.argv)==8):
+
+        vfname      = sys.argv[1]
+        cmdfname    = sys.argv[2]
+        FeH         = float(sys.argv[3])
+        flxfname    = "./bin/data/fluxdata/flux.dat"   
+
+        vdata       = np.loadtxt(vfname, dtype='f8', comments='#')
+        vdata       = clean_vdata(vdata)
+        MISTdata    = np.loadtxt(cmdfname, dtype='f8', comments='#')
+        fluxmodel0  = np.loadtxt(flxfname, dtype='f8', comments='#')
+        fluxmodel   = mu.makefluxmodel_grid(fluxmodel0[(fluxmodel0[:,1]==0.0)])
+        #exit()
+        #fluxmodel   = mu.makefluxmodel_FeH(fluxmodel0, FeH, FeHb=0.3)
+
+        if len(sys.argv) == 8:
+            nbin    = int(sys.argv[4])
+            nb_s    = int(sys.argv[5])
+            nwalker = int(sys.argv[6])
+            nstep   = int(sys.argv[7])
+            #if len(sys.argv) == 8:
+            #    if sys.argv[7] == "False":
+            #        S1flg   = False
+            #    elif sys.argv[7] == "True":
+            #        S1flg   = True
+            #    else:
+            #        print("7th arg is True or False.")
+            #        exit()
+            #else:
+            #    S1flg   = True
+        else:
+            nbin    = 3
+            nwalker = 10
+            nstep   = 1000
+            S1flg   = True
+        #if S1flg:
+        #    stail   = "_s2"
+        #else:
+        #    stail   = "_s1"
+
+        fkey    = vfname.split("/")[-1]
+        fkey    = fkey.split("_")[0] + "_nc"+str(int(nbin))+"ns"+str(int(nb_s))+"_w"+str(nwalker)+"_s"+str(nstep)+"_XX"
+        #main(vdata, MISTdata, fluxmodel, fkey=fkey, ndim=ndim, nwalker=nwalker, nstep=nstep, S1flg=False)
+        main(vdata, MISTdata, fluxmodel, fkey=fkey, nwalker=nwalker, nstep=nstep, S1flg=False, nbin=nbin, nb_s=nb_s)
+    else:
+        print("args) [hT/hKp file] [MISTcmd file] [FeH]")

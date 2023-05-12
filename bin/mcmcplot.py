@@ -32,7 +32,8 @@ def bound(xarray):
 
     return xsort[lnm],xsort[unm],(xsort[unm] - xsort[lnm])/20.
 
-def plot_corner(samples, fkey="tmp", save=True):
+def plot_corner(samples, fkey="tmp", save=True,
+    labels = ["S1", "c1", "S2", "c2", "S3", "c3", "S4", "c4"]):
 #def plot_corner(sampler, fkey="tmp", save=True, S1flg=True):
     #nshape  = np.shape(sampler.get_chain())
     nshape  = np.shape(samples)
@@ -50,7 +51,6 @@ def plot_corner(samples, fkey="tmp", save=True):
     #    labels = ["S1", "S2", "c0", "c1", "c2", "c3", "c4"]
     #else:
     #    labels = ["S2", "c0", "c1", "c2", "c3", "c4"]
-    labels = ["S1", "c1", "S2", "c2", "S3", "c3", "S4", "c4"]
 
     for i in range(ndim):
         ch_i        = limit_chain(samples_flt[:,i])
@@ -123,14 +123,15 @@ def plot_corner(samples, fkey="tmp", save=True):
 
 
 
-def plot_chain(samples, fkey="tmp", save=True, S1flg=True):
+def plot_chain(samples, fkey="tmp", save=True, S1flg=True,
+    labels = ["S1", "c1", "S2", "c2", "S3", "c3", "S4", "c4"]):
     ndim    = np.shape(samples)[-1]
     fig, axes = plt.subplots(ndim, 1, figsize=(6, 1.5*ndim), sharex=True)
     #if S1flg:
     #    labels = ["S1", "S2", "c0", "c1", "c2", "c3", "c4"]
     #else:
     #    labels = ["S2", "c0", "c1", "c2", "c3", "c4"]
-    labels = ["S1", "c1", "S2", "c2", "S3", "c3", "S4", "c4", "S5", "c5"]
+    #labels = ["S1", "c1", "S2", "c2", "S3", "c3", "S4", "c4", "S5", "c5"]
     for i in range(ndim):
         ax1 = axes[i]
         ax1.plot(samples[:, :, i], "k", alpha=0.3, lw=1)
@@ -147,6 +148,70 @@ def plot_chain(samples, fkey="tmp", save=True, S1flg=True):
         plt.close()
     else:
         plt.show()
+
+def plot_scatter2(udata, statres, ndim, MISTdata, fluxmodel, hmodelfunc, fkey="tmp", save=True):
+
+    nbin    = int(ndim[0])
+    logg_ar = iu.logg(MISTdata, udata[:,0])
+    fig     = plt.figure(figsize=(5.5,4.5))
+    ax1     = fig.add_subplot(3,1,(1,2))
+    ax2     = fig.add_subplot(3,1,3,sharex=ax1)
+
+    amp_av      = (udata[:,3]*udata[:,4]**(-2) \
+        + udata[:,5]*udata[:,6]**(-2))/(udata[:,4]**(-2) + udata[:,6]**(-2))
+    tmpar       = np.linspace(np.log10(np.min(amp_av)*0.9), np.log10(np.max(amp_av)*1.1), ndim[1]+1)
+    Sthres      = 10**tmpar
+    S_ar        = np.full(len(udata[:,0]), 0.01)
+    for i in range(int(ndim[1])):
+        cond    = ((Sthres[i]<=amp_av)&(amp_av<Sthres[i+1]))
+        S_ar[cond]  = statres[i+int(ndim[0]),0]
+
+
+    Tthres  = np.linspace(np.min(udata[:,0]), np.max(udata[:,0]), nbin+1)
+    zansa   = []
+    omodel  = []
+    for i in range(nbin):
+        cond    = ((Tthres[i]<=udata[:,0])&(udata[:,0]<Tthres[i+1]))
+        ax1.errorbar(udata[cond,0], udata[cond,1], yerr=udata[cond,2], fmt='o', ms=3.5, elinewidth=0.5, c='black', zorder=2)
+        xnew    = np.linspace(Tthres[i],Tthres[i+1],50)
+        lnew    = iu.logg(MISTdata, xnew)
+        hmodel,_    = hmodelfunc(xnew, statres[i,0], fluxmodel, lnew, S1=0, S2=0.1)
+        hmodel_p,_  = hmodelfunc(udata[cond,0], statres[i,0], fluxmodel, logg_ar[cond],\
+             S1=0, S2=S_ar[cond])
+        ax1.plot(xnew, hmodel, lw=1.5, c='orangered', zorder=3)
+        ax2.errorbar(udata[cond,0], udata[cond,1]-hmodel_p,\
+            yerr=udata[cond,2], fmt='o', ms=3.5, elinewidth=0.5, c='black', zorder=2)
+        ax2.axhline(0,ls=':',lw=0.8,zorder=0,c='black')
+        ax1.axhline(1,ls=':',lw=0.8,zorder=0,c='black')
+        zansa.append((udata[cond,0], udata[cond,1]-hmodel_p))
+
+        omodel.append([np.mean(udata[cond,0]), np.std(udata[cond,0]), \
+            statres[i,0], statres[i,1], statres[i,2]])
+                #statres[i*2,0], statres[i*2,1], statres[i*2,2]])
+        if i < nbin-1:
+            ax1.axvline(Tthres[i+1], ls='--', lw=0.5, zorder=0, c='black')
+            ax2.axvline(Tthres[i+1], ls='--', lw=0.5, zorder=0, c='black')
+    ax1.axes.xaxis.set_visible(False)
+    ax1.set_ylabel("$h_{T}$/$h_{Kp}$")
+    ax1.set_ylim((0, 2.))
+    ax1.set_yticks([0.2,0.6,1.0,1.4,1.8])
+    ax2.set_ylim((-1.8,1.8))
+    ax2.set_ylabel("residuals")
+    ax2.set_xlabel("effective temperature [K]")
+    plt.subplots_adjust(left=0.15,hspace=0.,top=0.9, bottom=0.15)
+
+    if save :
+        plt.savefig(dir+fkey+"_scatter.png", dpi=300)
+        plt.clf()
+        plt.close()
+    else:
+        plt.show()
+
+    omodel  = ['{:.2f}'.format(i) if abs(i) > 1 else str('{:.2e}'.format(i)) for i in sum(omodel,[])]
+    omodel  = np.array(omodel, dtype='unicode')
+    
+    return omodel.reshape(nbin,5), np.hstack(zansa)
+
 
 def plot_scatter(udata, statres, MISTdata, fluxmodel, hmodelfunc, fkey="tmp", save=True):
 
