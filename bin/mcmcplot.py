@@ -217,7 +217,7 @@ def plot_scatter(udata, statres, MISTdata, fluxmodel, hmodelfunc, dir="./mcmc/",
 
     nbin    = int(np.shape(statres)[0]/2)
     logg_ar = iu.logg(MISTdata, udata[:,0])
-    plt.rcParams["font.family"]     = "Arial"
+    #plt.rcParams["font.family"]     = "Arial"
     plt.rcParams["font.size"]     = 13
     fig     = plt.figure(figsize=(5.5,4.5))
     ax1     = fig.add_subplot(3,1,(1,2))
@@ -288,7 +288,7 @@ def plot_scatter_H(udata, statres, MISTdata, fluxmodel, hmodelfunc, s_flat,
 
     nbin    = int(np.shape(statres)[0]/2)
     logg_ar = iu.logg(MISTdata, udata[:,0])
-    plt.rcParams["font.family"]     = "Arial"
+    #plt.rcParams["font.family"]     = "Arial"
     plt.rcParams["font.size"]     = 13
     fig     = plt.figure(figsize=(5.5,4.5))
     ax1     = fig.add_subplot(3,1,(1,2))
