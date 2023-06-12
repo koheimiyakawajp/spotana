@@ -16,17 +16,6 @@ from copy import copy
 dir         = "./mcmc/"
 
 
-#def d_temp(Tph, c):
-#    dT  = np.full(np.shape(Tph), 0.)
-#    for i in range(len(c)):
-#        dT  += c[i]*(Tph - 3000.)**i
-#    return dT
-#    
-#def Tsp(Tph, c):
-#    Tspot   = Tph - d_temp(Tph, c)
-#
-#    return Tspot
-
 def Tsp(Tph, c):
     Tspot   = Tph*(1.- c)
     return Tspot
@@ -46,8 +35,6 @@ def h_model(Thost, c, S1, S2, fluxmodel, logg):
     Fhost   = mu.makefluxmodel_Tefflogg(fluxmodel, Thost, logg)
     Fspot   = mu.makefluxmodel_Tefflogg(fluxmodel, Tsp(Thost, c), logg)
     if (np.all(Fspot!=1) &(np.all(Fspot<Fhost))):
-        #Fphot       = (2.*Fhost - Fspot*(2.*S1 + S2))/(2.-2.*S1- S2)
-        #h   = (Fphot - Fspot)*S2/Fhost/2.
         h   = (1. - Fspot/Fhost)*S2/2.
         hKp = h[:,0]
         hT  = h[:,1]
@@ -60,11 +47,6 @@ def S_inv(Thost, h, c, fluxmodel, logg):
     Fhost   = mu.makefluxmodel_Tefflogg(fluxmodel, Thost, logg)
     Fspot   = mu.makefluxmodel_Tefflogg(fluxmodel, Tsp(Thost, c), logg)
     if (np.all(Fspot!=1) &(np.all(Fspot<Fhost))):
-        #Fphot       = (2.*Fhost - Fspot*S2)/(2.- S2)
-        #h   = (Fphot - Fspot)*S2/Fhost/2.
-        #c1  = 2*h*Fhost/(Fhost - Fspot)
-        #c2  = 1./(1. + h*Fhost/(Fhost - Fspot))
-        #S   = c1*c2
         S   = 2*h/(1. - Fspot/Fhost)
 
         return S.T
@@ -77,8 +59,6 @@ def loop_Scalc(nbin, Thost, h, c, fluxmodel, logg):
     Stotal      = []
     for i in range(nbin):
         cond    = ((Tthres[i]<=Thost)&(Thost<Tthres[i+1]))
-        #args_u  = [teff[cond], 0, 0, fluxmodel, logg[cond],\
-        #    hKp[cond], hKp_e[cond], hT[cond], hT_e[cond], S1flg]
         S       = S_inv(Thost[cond], h[cond], c[i], fluxmodel, logg[cond])
         Stotal.append(S)
     S   = np.hstack(Stotal)
@@ -106,13 +86,6 @@ def lnfn_unit(x, args):
     hT          = args[7]
     hT_e        = args[8]
 
-    S1flg       = args[9]
-    #if S1flg :
-    #    if (np.min(x[:1])<0.) | (1<=np.max(x[:1])) | (1.<np.sum(x[:1])):
-    #        return -np.inf
-    #    else:
-    #        hmodel,resh = hThKp_model(teff, x[2:], fluxmodel, logg, S1=x[0], S2=x[1])
-    #else :
     if (x[0]<0.) | (1<=x[0]) :
         return -np.inf
     else:
@@ -141,7 +114,7 @@ def lnfn(x, *args):
     hT_e        = args[8]
 
     #S1flg       = args[9]
-    S1flg       = False
+    lfac        = args[9]
     nbin        = args[10]
     Tthres      = np.linspace(np.min(teff), np.max(teff), nbin+1)
     #nx          = 3 if S1flg else 2
@@ -151,11 +124,11 @@ def lnfn(x, *args):
     for i in range(nbin):
         cond    = ((Tthres[i]<=teff)&(teff<Tthres[i+1]))
         args_u  = [teff[cond], 0, 0, fluxmodel, logg[cond],\
-            hKp[cond], hKp_e[cond], hT[cond], hT_e[cond], S1flg]
+            hKp[cond], hKp_e[cond], hT[cond], hT_e[cond]]
         x_u     = x[i*nx:(i+1)*nx]
         lnfn_total  += lnfn_unit(x_u, args_u)
 
-    return lnfn_total
+    return lnfn_total/lfac
 
 def make_init(x0, ndim, nwalker):
     res     = []
@@ -190,6 +163,22 @@ def emcee_fit(param, x0, ndim=2, nwalker=10, nstep=1000, dfrac=0.3, plot=False, 
     #return np.median(samples[:,:,0]), np.median(samples[:,:,1])
     return sampler
 
+def rm_outlier_logunit(idata, nsigma=3):
+    odata       = copy(idata)
+    lnd1        = np.log10(odata[:,1])
+    lnd3        = np.log10(odata[:,3])
+    lnd5        = np.log10(odata[:,5])
+    m1,e1       = np.median(lnd1), np.median(np.abs(np.median(lnd1)-lnd1))
+    m3,e3       = np.median(lnd3), np.median(np.abs(np.median(lnd3)-lnd3))
+    m5,e5       = np.median(lnd5), np.median(np.abs(np.median(lnd5)-lnd5))
+    i           = nsigma
+    cond        = (((m1-i*e1<lnd1)&(lnd1<m1+i*e1))\
+                   &((m3-i*e3<lnd3)&(lnd3<m3+i*e3))\
+                    &((m5-i*e5<lnd5)&(lnd5<m5+i*e5)))
+    odata       = odata[cond]
+
+    return odata
+
 def rm_outlier(idata):
     odata       = copy(idata)
     sid         = np.argsort(odata[:,1])
@@ -222,9 +211,9 @@ def form_result(statres, chi2, BIC, redchi, S1flg=True):
         name2  = name_ar[i] + "_er1"
         name3  = name_ar[i] + "_er2"
         name4  = name_ar[i] + "_str"
-        res[name1]  = '{:.2f}'.format(statres[i,0]) if abs(statres[i,0]) > 1 else '{:.2e}'.format(statres[i,0])
-        res[name2]  = '{:.2f}'.format(statres[i,1]) if abs(statres[i,1]) > 1 else '{:.2e}'.format(statres[i,1])
-        res[name3]  = '{:.2f}'.format(statres[i,2]) if abs(statres[i,2]) > 1 else '{:.2e}'.format(statres[i,2])
+        res[name1]  = '{:.2g}'.format(statres[i,0]) #if abs(statres[i,0]) > 0.1 else '{:.3f}'.format(statres[i,0])
+        res[name2]  = '{:.2g}'.format(statres[i,1]) #if abs(statres[i,1]) > 0.1 else '{:.3f}'.format(statres[i,1])
+        res[name3]  = '{:.2g}'.format(statres[i,2]) #if abs(statres[i,2]) > 0.1 else '{:.3f}'.format(statres[i,2])
         res[name4]  = res[name1]+"_{"+res[name2]+"}^{"+res[name3]+"}"
     res["chi2"]     = '{:.2f}'.format(chi2)
     res["bic"]      = '{:.2f}'.format(BIC)
@@ -235,14 +224,16 @@ def form_result(statres, chi2, BIC, redchi, S1flg=True):
 import json
 import subprocess
 #def main(vdata, MISTdata, fluxmodel, fkey="tmp", ndim=2, nwalker=10, nstep=1000, S1flg=False, nbin=3):
-def main(vdata, MISTdata, fluxmodel, fkey="tmp", nwalker=10, nstep=1000, S1flg=False, nbin=3):
-    udata       = rm_outlier(vdata)
+def main(vdata, MISTdata, fluxmodel, fkey="tmp", nwalker=10, nstep=1000, lfac=1.,\
+        S1flg=False, nbin=3):
+    #udata       = rm_outlier(vdata)
+    udata       = rm_outlier_logunit(vdata)
     logg_ar     = iu.logg(MISTdata, udata[:,0])
     ndim        = nbin*2
 
     args    = [udata[:,0], udata[:,1], udata[:,2], fluxmodel, logg_ar, \
                 udata[:,3], udata[:,4],\
-                    udata[:,5], udata[:,6], S1flg, nbin]
+                    udata[:,5], udata[:,6], lfac, nbin]
     
     fparam  = (dir + fkey).split("_w")[0]
     spres   = subprocess.run("ls -tr "+fparam+"*_result.json | tail -n 1",\
@@ -279,6 +270,7 @@ def main(vdata, MISTdata, fluxmodel, fkey="tmp", nwalker=10, nstep=1000, S1flg=F
     omodel, zansa   = mp.plot_scatter(udata, statres, MISTdata, fluxmodel, hThKp_model, fkey=fkey)
     np.savetxt(dir+fkey+"_scatter_zansa.dat", zansa.T)
     np.savetxt(dir+fkey+"_TcS_result.dat", omodel, fmt='%s')
+    mp.plot_scatter_H(udata, statres, MISTdata, fluxmodel, hThKp_model, s_flat[-100:], fkey=fkey)
 
     result_dict = form_result(statres, chi2, BIC, redchi, S1flg)
     tf          = open(dir+fkey+"_result.json","w")
@@ -331,6 +323,10 @@ if __name__=='__main__':
             nbin    = int(sys.argv[4])
             nwalker = int(sys.argv[5])
             nstep   = int(sys.argv[6])
+            if len(sys.argv) == 8:
+                lfac    = float(sys.argv[7])
+            else:
+                lfac    = 1.
             #if len(sys.argv) == 8:
             #    if sys.argv[7] == "False":
             #        S1flg   = False
@@ -346,6 +342,7 @@ if __name__=='__main__':
             nwalker = 10
             nstep   = 1000
             S1flg   = True
+            lfac    = 1.
         #if S1flg:
         #    stail   = "_s2"
         #else:
@@ -354,6 +351,7 @@ if __name__=='__main__':
         fkey    = vfname.split("/")[-1]
         fkey    = fkey.split("_")[0] + "_d"+str(int(nbin*2))+"_w"+str(nwalker)+"_s"+str(nstep)
         #main(vdata, MISTdata, fluxmodel, fkey=fkey, ndim=ndim, nwalker=nwalker, nstep=nstep, S1flg=False)
-        main(vdata, MISTdata, fluxmodel, fkey=fkey, nwalker=nwalker, nstep=nstep, S1flg=False, nbin=nbin)
+        main(vdata, MISTdata, fluxmodel, fkey=fkey, nwalker=nwalker, nstep=nstep, lfac=lfac,\
+            S1flg=False, nbin=nbin)
     else:
         print("args) [hT/hKp file] [MISTcmd file] [FeH]")

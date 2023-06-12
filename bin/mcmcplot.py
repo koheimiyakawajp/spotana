@@ -213,10 +213,12 @@ def plot_scatter2(udata, statres, ndim, MISTdata, fluxmodel, hmodelfunc, fkey="t
     return omodel.reshape(nbin,5), np.hstack(zansa)
 
 
-def plot_scatter(udata, statres, MISTdata, fluxmodel, hmodelfunc, fkey="tmp", save=True):
+def plot_scatter(udata, statres, MISTdata, fluxmodel, hmodelfunc, dir="./mcmc/", fkey="tmp", save=True):
 
     nbin    = int(np.shape(statres)[0]/2)
     logg_ar = iu.logg(MISTdata, udata[:,0])
+    plt.rcParams["font.family"]     = "Arial"
+    plt.rcParams["font.size"]     = 13
     fig     = plt.figure(figsize=(5.5,4.5))
     ax1     = fig.add_subplot(3,1,(1,2))
     ax2     = fig.add_subplot(3,1,3,sharex=ax1)
@@ -226,15 +228,28 @@ def plot_scatter(udata, statres, MISTdata, fluxmodel, hmodelfunc, fkey="tmp", sa
     omodel  = []
     for i in range(nbin):
         cond    = ((Tthres[i]<=udata[:,0])&(udata[:,0]<Tthres[i+1]))
-        ax1.errorbar(udata[cond,0], udata[cond,1], yerr=udata[cond,2], fmt='o', ms=3.5, elinewidth=0.5, c='black', zorder=2)
+        ax1.errorbar(udata[cond,0], udata[cond,1], yerr=udata[cond,2], fmt='o', ms=2.8,
+            elinewidth=0.5, c='black', zorder=2, alpha=0.5)
         xnew    = np.linspace(Tthres[i],Tthres[i+1],50)
         lnew    = iu.logg(MISTdata, xnew)
         hmodel,_    = hmodelfunc(xnew, statres[i*2+1,0], fluxmodel, lnew, S1=0, S2=statres[i*2,0])
         hmodel_p,_  = hmodelfunc(udata[cond,0], statres[i*2+1,0], fluxmodel, logg_ar[cond],\
              S1=0, S2=statres[i*2,0])
-        ax1.plot(xnew, hmodel, lw=1.5, c='orangered', zorder=3)
+        ax1.plot(xnew, hmodel, lw=2, c='red', zorder=3)
+        stud    = np.sort(udata[cond,1])
+        nsd     = len(stud)
+        er1     = np.abs(stud[int(nsd*0.159)] - stud[int(nsd*0.5)])
+        er2     = np.abs(stud[int(nsd*0.841)] - stud[int(nsd*0.5)])
+        er      = np.array((er1,er2))
+        #ax1.scatter(np.mean(udata[cond,0]), np.average(udata[cond,1], weights=udata[cond,2]))
+        #ax1.scatter(np.median(udata[cond,0]), np.median(udata[cond,1]), s=50, zorder=3, c='deepskyblue', marker='o',
+        #    ec='black', linewidth=0.5)
+        ax1.errorbar(np.median(udata[cond,0]), np.median(udata[cond,1]), yerr=er.reshape(-1,1),
+                     ms=10, mfc='skyblue', fmt='o', mec='black', ecolor='skyblue', elinewidth=2)
+        #, zorder=3, c='deepskyblue', marker='o',
+            #ec='black', linewidth=0.5)
         ax2.errorbar(udata[cond,0], udata[cond,1]-hmodel_p,\
-            yerr=udata[cond,2], fmt='o', ms=3.5, elinewidth=0.5, c='black', zorder=2)
+            yerr=udata[cond,2], fmt='o', ms=2.8, elinewidth=0.5, c='black', zorder=2, alpha=0.5)
         ax2.axhline(0,ls=':',lw=0.8,zorder=0,c='black')
         ax1.axhline(1,ls=':',lw=0.8,zorder=0,c='black')
         zansa.append((udata[cond,0], udata[cond,1]-hmodel_p))
@@ -243,13 +258,15 @@ def plot_scatter(udata, statres, MISTdata, fluxmodel, hmodelfunc, fkey="tmp", sa
             statres[i*2+1,0], statres[i*2+1,1], statres[i*2+1,2],\
                 statres[i*2,0], statres[i*2,1], statres[i*2,2]])
         if i < nbin-1:
-            ax1.axvline(Tthres[i+1], ls='--', lw=0.5, zorder=0, c='black')
-            ax2.axvline(Tthres[i+1], ls='--', lw=0.5, zorder=0, c='black')
+            ax1.axvline(Tthres[i+1], ls='-', lw=0.8, zorder=0, c='black')
+            ax2.axvline(Tthres[i+1], ls='-', lw=0.8, zorder=0, c='black')
     ax1.axes.xaxis.set_visible(False)
     ax1.set_ylabel("$h_{T}$/$h_{Kp}$")
     ax1.set_ylim((0, 2.))
     ax1.set_yticks([0.2,0.6,1.0,1.4,1.8])
     ax2.set_ylim((-1.8,1.8))
+    #ax2.set_ylim((-10,10))
+    #ax2.set_yscale("log")
     ax2.set_ylabel("residuals")
     ax2.set_xlabel("effective temperature [K]")
     plt.subplots_adjust(left=0.15,hspace=0.,top=0.9, bottom=0.15)
@@ -266,46 +283,71 @@ def plot_scatter(udata, statres, MISTdata, fluxmodel, hmodelfunc, fkey="tmp", sa
 
     return omodel.reshape(nbin,8), np.hstack(zansa)
     
-    #newx    = np.linspace(min(vdata[:,0]), max(udata[:,0]), 300)
-    #newlogg = iu.logg(MISTdata, newx)
+def plot_scatter_H(udata, statres, MISTdata, fluxmodel, hmodelfunc, s_flat,
+                   dir="./mcmc/", fkey="tmp", save=True):
 
-    #fig     = plt.figure(figsize=(5.5,4.5))
+    nbin    = int(np.shape(statres)[0]/2)
+    logg_ar = iu.logg(MISTdata, udata[:,0])
+    plt.rcParams["font.family"]     = "Arial"
+    plt.rcParams["font.size"]     = 13
+    fig     = plt.figure(figsize=(5.5,4.5))
+    ax1     = fig.add_subplot(3,1,(1,2))
+    ax2     = fig.add_subplot(3,1,3,sharex=ax1)
 
-    #ax1     = fig.add_subplot(3,1,(1,2))
-    #if S1flg:
-    #    hThKp,_ = hmodelfunc(newx, args[2:], fluxmodel, newlogg, S1=args[0], S2=args[1])
-    #else:
-    #    hThKp,_ = hmodelfunc(newx, args[1:], fluxmodel, newlogg, S1=0, S2=args[1])
+    Tthres  = np.linspace(np.min(udata[:,0]), np.max(udata[:,0]), nbin+1)
+    zansa   = []
+    omodel  = []
+    for i in range(nbin):
+        cond    = ((Tthres[i]<=udata[:,0])&(udata[:,0]<Tthres[i+1]))
+        #ax1.errorbar(udata[cond,0], udata[cond,1], yerr=udata[cond,2], fmt='o', ms=2.8,
+        #    elinewidth=0.5, c='black', zorder=2, alpha=0.5)
+        xnew    = np.linspace(Tthres[i],Tthres[i+1],50)
+        lnew    = iu.logg(MISTdata, xnew)
+        hmodel_p,resh_p = hmodelfunc(udata[cond,0], statres[i*2+1,0], fluxmodel, logg_ar[cond],\
+             S1=0, S2=statres[i*2,0])
+        if i==0:
+            ax1.errorbar(udata[cond,0], udata[cond,3], yerr=udata[cond,4], 
+                        fmt='o', ms=2.8, elinewidth=0.5, c='blue', alpha=0.5, label='$Kp$')
+            ax1.errorbar(udata[cond,0], udata[cond,5], yerr=udata[cond,6], 
+                        fmt='o', ms=2.8, elinewidth=0.5, c='orangered', alpha=0.5, label='$T$')
+        else:
+            ax1.errorbar(udata[cond,0], udata[cond,3], yerr=udata[cond,4], 
+                        fmt='o', ms=2.8, elinewidth=0.5, c='blue', alpha=0.5)
+            ax1.errorbar(udata[cond,0], udata[cond,5], yerr=udata[cond,6], 
+                        fmt='o', ms=2.8, elinewidth=0.5, c='orangered', alpha=0.5)
+        for k in s_flat:
+            x0  = k[i*2+1]
+            x1  = k[i*2]
+            _,resh   = hmodelfunc(xnew, x0, fluxmodel, lnew, S1=0, S2=x1)
+            if len(resh)!=3:
+                ax1.plot(xnew, resh[0], c='royalblue', alpha=0.08, lw=1)
+                ax1.plot(xnew, resh[1], c='orangered', alpha=0.08, lw=1)
+        
+        _,resh   = hmodelfunc(xnew, statres[i*2+1,0], fluxmodel, lnew, S1=0, S2=statres[i*2,0])
+        ax1.plot(xnew, resh[0], c='mediumblue', lw=1.5, zorder=5)
+        ax1.plot(xnew, resh[1], c='red', lw=1.5, zorder=5)
 
-    #ax1.plot(newx, hThKp, c='darkorange', zorder=3)
-    #ax1.scatter(vdata[:,0], vdata[:,1], s=10, c='lightgrey', zorder=1)
-    #ax1.errorbar(udata[:,0], udata[:,1], yerr=udata[:,2], fmt='o', ms=3.5, elinewidth=0.5, c='black', zorder=2)
-    #ax1.axhline(1., lw=1, c='black', ls=':', zorder=0)
-    ##ax1.set_yscale("log")
-    #ax1.axes.xaxis.set_visible(False)
-    #ax1.set_ylabel("$h_{T}$/$h_{Kp}$")
-    ##ax1.set_ylim((5e-2, 2e1))
-    #ax1.set_ylim((0, 2.))
-    #ax1.set_yticks([0.2,0.6,1.0,1.4,1.8])
+        ax2.errorbar(udata[cond,0], udata[cond,3]-resh_p[0],\
+            yerr=udata[cond,4], fmt='o', ms=2.8, elinewidth=0.5, c='royalblue', zorder=2, alpha=0.5)
+        ax2.errorbar(udata[cond,0], udata[cond,5]-resh_p[1],\
+            yerr=udata[cond,6], fmt='o', ms=2.8, elinewidth=0.5, c='orangered', zorder=2, alpha=0.5)
+        ax2.axhline(0,ls=':',lw=0.8,zorder=0,c='black')
+        ax1.axhline(1,ls=':',lw=0.8,zorder=0,c='black')
+        zansa.append((udata[cond,0], udata[cond,1]-hmodel_p))
 
-    #if S1flg:
-    #    hThKp_s,_   = hmodelfunc(udata[:,0], args[2:], fluxmodel, newlogg, S1=args[0], S2=args[1])
-    #else:
-    #    hThKp_s,_   = hmodelfunc(udata[:,0], args[1:], fluxmodel, newlogg, S1=0, S2=args[1])
-
-    #ax2     = fig.add_subplot(3,1,3, sharex=ax1)
-    #ax2.errorbar(udata[:,0], udata[:,1] - hThKp_s, yerr=udata[:,2], ms=3.5, elinewidth=0.5, fmt='o', c='black', zorder=0)
-    #ax2.axhline(0., lw=1, c='black', ls=':')
-    #ax2.set_ylim((-1.8,1.8))
-    #ax2.set_ylabel("residuals")
-    #ax2.set_xlabel("effective temperature [K]")
-    #plt.subplots_adjust(left=0.15,hspace=0.,top=0.9, bottom=0.15)
-
-    #if save :
-    #    plt.savefig(dir+fkey+"_scatter.png", dpi=300)
-    #    plt.clf()
-    #    plt.close()
-    #else:
-    #    plt.show()
-
-    #return hThKp_s
+        omodel.append([np.mean(udata[cond,0]), np.std(udata[cond,0]), \
+            statres[i*2+1,0], statres[i*2+1,1], statres[i*2+1,2],\
+                statres[i*2,0], statres[i*2,1], statres[i*2,2]])
+        if i < nbin-1:
+            ax1.axvline(Tthres[i+1], ls='-', lw=0.8, zorder=0, c='black')
+            ax2.axvline(Tthres[i+1], ls='-', lw=0.8, zorder=0, c='black')
+    ax1.set_ylim((1e-3,3.5e-2))
+    ax1.axes.xaxis.set_visible(False)
+    ax1.set_ylabel("$h$")
+    ax2.set_ylim((-0.02,0.02))
+    ax2.set_ylabel("residuals")
+    ax2.set_xlabel("effective temperature [K]")
+    ax1.legend(loc='upper right', fontsize=10)
+    plt.subplots_adjust(left=0.15,hspace=0.,top=0.9, bottom=0.15)
+    #plt.show()
+    plt.savefig(dir+fkey+"_scatter_inH.png", dpi=300)
