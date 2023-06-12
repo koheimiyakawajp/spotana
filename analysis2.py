@@ -263,9 +263,9 @@ def main(vdata, MISTdata, fluxmodel, fkey="tmp", nwalker=10, nstep=1000, lfac=1.
 
     statres     = calstat(s_flat.T)
     bestlnfn    = max(sampler.get_log_prob(flat=True))
-    chi2        = -2*bestlnfn
+    chi2        = -2*bestlnfn*lfac
     BIC         = chi2 + ndim*np.log(len(udata[:,0])*2)
-    redchi      = chi2/(len(udata[:,0])*2 - ndim)
+    redchi      = chi2/(len(udata[:,0])*2 - ndim)/lfac
     
     omodel, zansa   = mp.plot_scatter(udata, statres, MISTdata, fluxmodel, hThKp_model, fkey=fkey)
     np.savetxt(dir+fkey+"_scatter_zansa.dat", zansa.T)
