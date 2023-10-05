@@ -29,7 +29,10 @@ def remove_nan(data):
 
 def dl_lightcurve(sr_object, fpdc=True):
     lcf     = sr_object.download()
+    print(lcf)
     t_ofs   = lcf.meta['BJDREFI']
+    #print(lcf.meta["CROWDSAP"])
+    #print(lcf.meta["FLFRCSAP"])
     time    = lcf.time
     time    = obj_to_f(time)
     if fpdc:
@@ -45,11 +48,11 @@ def dl_lightcurve(sr_object, fpdc=True):
 
 def merge_lightcurves(search_result, author, texp, fpdc=True):
     TESS_sr1  = search_result[(search_result.author==author)]
-    #print(TESS_sr1)
+    print(TESS_sr1.mission)
+
     if len(TESS_sr1) != 0:
         exp_ar  = np.array(TESS_sr1.exptime,dtype='f8')
         TESS_search_result  = TESS_sr1[(exp_ar==float(texp))]
-        #print(TESS_search_result)
         if len(TESS_search_result) == 0:
             return [0]
     else:
@@ -121,6 +124,34 @@ def tesslc_byepic(epicid, fpdc=True):
 
     return data
 
+def check_contaminant(epicid):
+    TIC     = EPIC_to_TIC(epicid)
+    search_result = lk.search_lightcurve(TIC)
+    search_result = search_result[(search_result.target_name==TIC[4:])]
+    if np.all(search_result.author!='SPOC'):
+        return [0]
+    else:
+        search_result   = search_result[(search_result.author=='SPOC')]
+    
+    
+    flgs    =[]
+    nsr     = 0
+    for sr in search_result:
+        #lcf     = search_result.download()
+        lcf     = sr.download()
+        cs  = lcf.meta["CROWDSAP"]
+        fs  = lcf.meta["FLFRCSAP"]
+        flgs.append([cs, fs])
+        nsr += 1
+    flgs    = np.array(flgs)
+    if nsr > 1:
+        flgs    = np.mean(flgs,axis=0)
+    
+    return flgs
+    
+
+
+
 def k2lc_byepic(epicid, author='K2SFF', fpdc=True):
     search_result = lk.search_lightcurve("EPIC "+epicid)
     data    = merge_lightcurves(search_result, author,'1800', fpdc=fpdc)
@@ -131,15 +162,17 @@ if __name__=='__main__':
     #data   = k2lc_byepic(epicid, author='K2', fpdc=True)
     #data2  = k2lc_byepic(epicid, author='K2', fpdc=False)
     #data3  = k2lc_byepic(epicid, author='K2SFF')
-    data2   = tesslcQLP_byepic(epicid)
+    #data2   = tesslcQLP_byepic(epicid)
+    print(check_contaminant(epicid))
+    exit()
     data    = tesslc_byepic(epicid, fpdc=False)
-    data3   = tesslc_byepic(epicid)
+    #data3   = tesslc_byepic(epicid)
 
-    #plt.scatter(data[0], data[1], s=1, color='black', zorder=3)
+    plt.scatter(data[0], data[1], s=1, color='black', zorder=3)
     #plt.scatter(data[0], data[1], s=1, color='black', zorder=3)
     #plt.scatter(data2[0], data2[1], s=1, color='red', zorder=4)
-    plt.scatter(data3[0], data3[1], s=1, color='pink', zorder=5)
-    print(data3[1])
+    #plt.scatter(data3[0], data3[1], s=1, color='pink', zorder=5)
+    #print(data3[1])
     plt.show()
 
 
